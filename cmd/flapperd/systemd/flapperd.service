@@ -1,0 +1,8 @@
+[Unit]
+Description=Splitflap Display Control Service
+
+[Service]
+ExecStart=/usr/loca/bin/flapperd
+
+[Install]
+WantedBy=multi-user.target
