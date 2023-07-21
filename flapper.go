@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/dgryski/go-cobs"
@@ -24,6 +25,9 @@ import (
 	"github.com/muesli/reflow/wrap"
 	"github.com/trapgate/flapper/proto"
 	"go.bug.st/serial"
+	"golang.org/x/text/runes"
+	"golang.org/x/text/transform"
+	"golang.org/x/text/unicode/norm"
 	gproto "google.golang.org/protobuf/proto"
 )
 
@@ -31,7 +35,7 @@ const (
 	retryTimeout = 250 * time.Millisecond
 
 	// TODO: Get this from the display
-	runes = " abcdefghijklmnopqrstuvwxyz0123456789.,'"
+	runeSet = " abcdefghijklmnopqrstuvwxyz0123456789.,'"
 )
 
 type sendReq struct {
@@ -78,7 +82,7 @@ func NewDisplay() (*Display, error) {
 
 	// TODO: Wait for the result.
 	d.readStatus()
-	for i, r := range runes {
+	for i, r := range runeSet {
 		d.runes[r] = i
 	}
 
@@ -295,7 +299,7 @@ func dumpStateMsg(msg *proto.SplitflapState) {
 			fmt.Println()
 		}
 		style := &stopped
-		char := runes[m.FlapIndex]
+		char := runeSet[m.FlapIndex]
 		if m.Moving {
 			style = &moving
 		}
@@ -341,6 +345,37 @@ func (d *Display) Init() error {
 // spaces; if it's longer it will be truncated mercilessly.
 // TODO: validate each character - don't pass runes the display can't display.
 func (d *Display) SetText(text string) error {
+	text = d.PrepText(text)
+	ch := make(chan error)
+
+	fmt.Println(text)
+	mc := make([]*proto.SplitflapCommand_ModuleCommand, d.cells)
+	for i, r := range text {
+		mc[i] = &proto.SplitflapCommand_ModuleCommand{
+			Action: proto.SplitflapCommand_ModuleCommand_GO_TO_FLAP,
+			Param:  uint32(d.runes[r]),
+		}
+	}
+	req := sendReq{
+		msg: &proto.ToSplitflap{
+			Payload: &proto.ToSplitflap_SplitflapCommand{
+				SplitflapCommand: &proto.SplitflapCommand{
+					Modules: mc,
+				},
+			},
+		},
+		ch: ch,
+	}
+
+	d.toDisplay <- req
+
+	return <-ch
+}
+
+func (d *Display) PrepText(text string) string {
+	// First, normalize the text so that it only has characters the display can
+	// show.
+	text = d.normalize(text)
 	// This works imperfectly. It does accomplish forcing a line break when the
 	// top word is longer than 12 runes, but when it does so the second line
 	// doesn't get appended to the broken first. Also, it's not possible to
@@ -366,31 +401,15 @@ func (d *Display) SetText(text string) error {
 	}
 	text = strings.Join(lines[:2], "")
 	// fmt.Printf("%q: %q %q", text, lines[0], lines[1])
+	return text
+}
 
-	ch := make(chan error)
-
-	fmt.Println(text)
-	mc := make([]*proto.SplitflapCommand_ModuleCommand, d.cells)
-	for i, r := range text {
-		mc[i] = &proto.SplitflapCommand_ModuleCommand{
-			Action: proto.SplitflapCommand_ModuleCommand_GO_TO_FLAP,
-			Param:  uint32(d.runes[r]),
-		}
-	}
-	req := sendReq{
-		msg: &proto.ToSplitflap{
-			Payload: &proto.ToSplitflap_SplitflapCommand{
-				SplitflapCommand: &proto.SplitflapCommand{
-					Modules: mc,
-				},
-			},
-		},
-		ch: ch,
-	}
-
-	d.toDisplay <- req
-
-	return <-ch
+// normalize will convert all runes to their closest ascii equivalents
+func (d *Display) normalize(s string) string {
+	t := transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
+	s, _, _ = transform.String(t, s)
+	s = strings.ToLower(s)
+	return s
 }
 
 func (d *Display) readStatus() error {

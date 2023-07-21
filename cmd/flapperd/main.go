@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/alecthomas/kong"
 	"github.com/trapgate/flapper"
+	"github.com/trapgate/flapper/idle"
 )
 
 var (
@@ -20,7 +22,8 @@ var (
 )
 
 type serveCmd struct {
-	d *flapper.Display
+	d     *flapper.Display
+	idler idle.Display
 }
 
 type displayCmd struct {
@@ -52,6 +55,14 @@ func (c *serveCmd) Run(ctx *kong.Context) error {
 	fmt.Println("listening on port 8080")
 	http.HandleFunc("/text", c.httpText)
 	http.HandleFunc("/status", c.httpStatus)
+	http.HandleFunc("/idle", c.httpIdle)
+
+	// Set up the "screensaver"
+	c.idler = idle.NewQuakeMon(10 * time.Minute)
+	idlerCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go c.idler.Run(idlerCtx, d)
+
 	err = http.ListenAndServe(":8080", nil)
 	fmt.Println(err)
 	return err
@@ -62,6 +73,7 @@ func (c *serveCmd) httpText(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		fmt.Fprintf(w, "%v", c.d.Text())
 	case http.MethodPost:
+		c.idler.Reset()
 		// maxmoving will limit the number of displays that animate at a time.
 		if maxMoving, err := readFormUint(r, "maxmoving"); err != errNoFormValue {
 			if err != nil {
@@ -102,6 +114,8 @@ func (c *serveCmd) httpText(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		// animStyle specifies what order to start the modules in. It will have
+		// no visible effect unless startdelay or maxmoving is also set.
 		if animStyle, err := readFormString(r, "animstyle"); err != errNoFormValue {
 			if err != nil {
 				w.WriteHeader(http.StatusBadRequest)
@@ -149,6 +163,22 @@ func (c *serveCmd) httpStatus(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		fmt.Fprintf(w, "%v", c.d.Status())
+	}
+}
+
+func (c *serveCmd) httpIdle(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		fmt.Fprintf(w, "%v", c.idler.Name())
+	case http.MethodPost:
+		if enable, err := readFormBool(r, "enable"); err != errNoFormValue {
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			c.idler.Enable(enable)
+		}
+		// TODO: allow the delay and the idler name to be set.
 	}
 }
 

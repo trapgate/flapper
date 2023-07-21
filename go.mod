@@ -8,7 +8,9 @@ require (
 	github.com/dgryski/go-cobs v0.0.0-20211104005220-29d497e3aad1
 	github.com/golang/protobuf v1.5.2
 	github.com/muesli/reflow v0.3.0
+	github.com/trapgate/go-quake v0.0.0-00010101000000-000000000000
 	go.bug.st/serial v1.3.5
+	golang.org/x/text v0.11.0
 	google.golang.org/protobuf v1.28.1
 )
 
@@ -26,3 +28,5 @@ require (
 )
 
 replace github.com/trapgate/splitflap => /home/geoff/splitflap
+
+replace github.com/trapgate/go-quake => /home/geoff/Sync/go-quake
