@@ -98,7 +98,6 @@ func (d *Display) connect() error {
 	}
 	d.port = p
 	d.rw = p
-	// err = p.SetReadTimeout(time.Second)
 
 	return err
 }
@@ -399,9 +398,10 @@ func (d *Display) PrepText(text string) string {
 		}
 		lines[i] = line
 	}
-	text = strings.Join(lines[:2], "")
+	d.text = strings.Join(lines[:2], "")
 	// fmt.Printf("%q: %q %q", text, lines[0], lines[1])
-	return text
+
+	return d.text
 }
 
 // normalize will convert all runes to their closest ascii equivalents

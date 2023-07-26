@@ -39,24 +39,25 @@ func (q byMag) Swap(i, j int) {
 // QuakeMon is an earthquake monitor. It uses the USGS earthquake feed, as
 // implemented in the usgsquake package.
 type QuakeMon struct {
-	startDelay time.Duration
-	resetCh    chan struct{}
-	enableCh   chan bool
+	startDelay      time.Duration
+	currentQuakeURL string
+	resetCh         chan struct{}
+	enableCh        chan bool
 }
 
-func NewQuakeMon(startDelay time.Duration) QuakeMon {
-	return QuakeMon{
+func NewQuakeMon(startDelay time.Duration) *QuakeMon {
+	return &QuakeMon{
 		startDelay: startDelay,
 		resetCh:    make(chan struct{}),
 		enableCh:   make(chan bool),
 	}
 }
 
-func (q QuakeMon) Name() string {
+func (q *QuakeMon) Name() string {
 	return "Earthquake Monitor"
 }
 
-func (q QuakeMon) Run(ctx context.Context, display *flapper.Display) {
+func (q *QuakeMon) Run(ctx context.Context, display *flapper.Display) {
 	showing := false
 	enable := true
 	t := time.NewTimer(q.startDelay)
@@ -94,15 +95,15 @@ func (q QuakeMon) Run(ctx context.Context, display *flapper.Display) {
 	}
 }
 
-func (q QuakeMon) Enable(enable bool) {
+func (q *QuakeMon) Enable(enable bool) {
 	q.enableCh <- enable
 }
 
-func (q QuakeMon) Reset() {
+func (q *QuakeMon) Reset() {
 	q.resetCh <- struct{}{}
 }
 
-func (q QuakeMon) print(display *flapper.Display, quakes quake.QuakeList) error {
+func (q *QuakeMon) print(display *flapper.Display, quakes quake.QuakeList) error {
 	sort.Sort(sort.Reverse(byMag(quakes.Features)))
 
 	// Display the largest quake
@@ -110,8 +111,15 @@ func (q QuakeMon) print(display *flapper.Display, quakes quake.QuakeList) error 
 		quakes.Features[0].Properties.Magnitude,
 		quakes.Features[0].Properties.Place)
 
-	desc = truncate(desc)
+	// For some reason the Place field (and the title too) sometimes changes
+	// on subsequent polls. Remember the URL of the displayed quake so we don't
+	// just switch back and forth.
+	if q.currentQuakeURL == quakes.Features[0].Properties.URL {
+		return nil
+	}
+	q.currentQuakeURL = quakes.Features[0].Properties.URL
 
+	desc = truncate(desc)
 	return display.SetText(desc)
 }
 

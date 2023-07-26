@@ -71,7 +71,11 @@ func (c *serveCmd) Run(ctx *kong.Context) error {
 func (c *serveCmd) httpText(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		fmt.Fprintf(w, "%v", c.d.Text())
+		text := c.d.Text()
+		if len(text) > 12 {
+			text = text[:12] + "\n" + text[12:]
+		}
+		fmt.Fprintf(w, "%v", text)
 	case http.MethodPost:
 		c.idler.Reset()
 		// maxmoving will limit the number of displays that animate at a time.
