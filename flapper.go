@@ -258,8 +258,9 @@ func (d *Display) handleFromMsg(msg *proto.FromSplitflap, acks chan<- uint32) {
 	switch msg.Payload.(type) {
 	case *proto.FromSplitflap_SplitflapState:
 		d.lastStatus = *msg.GetSplitflapState()
-		dumpStateMsg(msg.GetSplitflapState())
-		d.cells = len(msg.GetSplitflapState().Modules)
+		d.cells = len(d.lastStatus.Modules)
+		d.text = currentText(&d.lastStatus)
+		// dumpStateMsg(&d.lastStatus)
 	case *proto.FromSplitflap_Log:
 		// For now just print them.
 		fmt.Println(msg.GetLog().Msg)
@@ -269,6 +270,14 @@ func (d *Display) handleFromMsg(msg *proto.FromSplitflap, acks chan<- uint32) {
 	default:
 		fmt.Println("received", msg)
 	}
+}
+
+func currentText(msg *proto.SplitflapState) string {
+	text := strings.Builder{}
+	for _, m := range msg.Modules {
+		text.WriteByte(runeSet[m.FlapIndex])
+	}
+	return text.String()
 }
 
 // dumpStateMsg displays a SplitflapState message to the terminal, using color.
@@ -398,10 +407,10 @@ func (d *Display) PrepText(text string) string {
 		}
 		lines[i] = line
 	}
-	d.text = strings.Join(lines[:2], "")
+	//d.text = strings.Join(lines[:2], "")
 	// fmt.Printf("%q: %q %q", text, lines[0], lines[1])
 
-	return d.text
+	return strings.Join(lines[:2], "")
 }
 
 // normalize will convert all runes to their closest ascii equivalents

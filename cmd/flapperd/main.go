@@ -17,13 +17,18 @@ import (
 	"github.com/trapgate/flapper/idle"
 )
 
+const (
+	defaultIdlerDelay = 10 * time.Minute
+)
+
 var (
 	errNoFormValue = errors.New("form value not set")
 )
 
 type serveCmd struct {
-	d     *flapper.Display
-	idler idle.Display
+	d           *flapper.Display
+	idler       idle.Display
+	cancelIdler context.CancelFunc
 }
 
 type displayCmd struct {
@@ -50,6 +55,7 @@ func (c *serveCmd) Run(ctx *kong.Context) error {
 	if err != nil {
 		return err
 	}
+	d.Init()
 	c.d = d
 
 	fmt.Println("listening on port 8080")
@@ -58,13 +64,14 @@ func (c *serveCmd) Run(ctx *kong.Context) error {
 	http.HandleFunc("/idle", c.httpIdle)
 
 	// Set up the "screensaver"
-	c.idler = idle.NewQuakeMon(10 * time.Minute)
+	c.idler = idle.NewQuakeMon(defaultIdlerDelay)
 	idlerCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	c.cancelIdler = cancel
 	go c.idler.Run(idlerCtx, d)
 
 	err = http.ListenAndServe(":8080", nil)
 	fmt.Println(err)
+	c.cancelIdler()
 	return err
 }
 
@@ -240,10 +247,7 @@ func (c *displayCmd) Run(ctx *kong.Context) error {
 	if err != nil {
 		return err
 	}
-	time.Sleep(5 * time.Second)
 	d.SetText(c.Text)
-	// Temporarily:
-	time.Sleep(5 * time.Second)
 
 	return nil
 }
@@ -254,6 +258,6 @@ func (c *statusCmd) Run(ctx *kong.Context) error {
 		return err
 	}
 	d.Init()
-	time.Sleep(5 * time.Second)
+	fmt.Println(d.Status())
 	return nil
 }
